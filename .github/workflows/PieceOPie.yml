@@ -1,0 +1,193 @@
+name: Build Universal Python with OpenCV
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-14  # Apple Silicon Mac required for universal builds
+    
+    steps:
+    - name: Install build dependencies
+      run: |
+        brew install cmake pkg-config wget openssl@3 readline sqlite3 xz zlib tcl-tk
+    
+    - name: Build Universal Python 3.10.8
+      run: |
+        mkdir -p ~/HanCraft_Pro/python_embed
+        cd ~
+        
+        # Download Python source
+        curl -O https://www.python.org/ftp/python/3.10.8/Python-3.10.8.tgz
+        tar -xf Python-3.10.8.tgz
+        cd Python-3.10.8
+        
+        # Configure for universal build
+        OPENSSL_PREFIX=$(brew --prefix openssl@3)
+        export CFLAGS="-I${OPENSSL_PREFIX}/include -I$(brew --prefix readline)/include -I$(brew --prefix sqlite)/include -I$(brew --prefix xz)/include -I$(brew --prefix zlib)/include"
+        export LDFLAGS="-L${OPENSSL_PREFIX}/lib -L$(brew --prefix readline)/lib -L$(brew --prefix sqlite)/lib -L$(brew --prefix xz)/lib -L$(brew --prefix zlib)/lib"
+        export CPPFLAGS="-I${OPENSSL_PREFIX}/include"
+        
+        ./configure --prefix=$HOME/HanCraft_Pro/python_embed \
+                    --enable-universalsdk \
+                    --with-universal-archs=universal2 \
+                    --with-openssl=${OPENSSL_PREFIX} \
+                    --enable-optimizations
+        
+        # Build and install
+        make -j $(sysctl -n hw.ncpu)
+        make install
+        
+        # Bundle OpenSSL libraries for portability
+        mkdir -p $HOME/HanCraft_Pro/python_embed/lib/openssl
+        cp ${OPENSSL_PREFIX}/lib/libssl.*.dylib $HOME/HanCraft_Pro/python_embed/lib/openssl/
+        cp ${OPENSSL_PREFIX}/lib/libcrypto.*.dylib $HOME/HanCraft_Pro/python_embed/lib/openssl/
+        
+        # Update library paths to be relative
+        cd $HOME/HanCraft_Pro/python_embed/lib
+        for lib in python3.10/lib-dynload/_ssl*.so python3.10/lib-dynload/_hashlib*.so; do
+          if [ -f "$lib" ]; then
+            SSL_LIB=$(ls openssl/libssl.*.dylib | head -n 1)
+            CRYPTO_LIB=$(ls openssl/libcrypto.*.dylib | head -n 1)
+            install_name_tool -change ${OPENSSL_PREFIX}/lib/libssl.3.dylib @loader_path/../../openssl/$(basename $SSL_LIB) $lib 2>/dev/null || true
+            install_name_tool -change ${OPENSSL_PREFIX}/lib/libcrypto.3.dylib @loader_path/../../openssl/$(basename $CRYPTO_LIB) $lib 2>/dev/null || true
+          fi
+        done
+    
+    - name: Verify Python Universal Binary
+      run: |
+        cd ~/HanCraft_Pro/python_embed
+        echo "=== Python Architecture ==="
+        lipo -info bin/python3.10
+        echo ""
+        echo "=== Python Version ==="
+        ./bin/python3.10 --version
+        echo ""
+        echo "=== SSL Support ==="
+        ./bin/python3.10 -c "import ssl; print('SSL:', ssl.OPENSSL_VERSION)"
+    
+    - name: Build OpenCV as Universal Binary
+      run: |
+        cd ~
+        
+        # Download OpenCV (basic, not contrib)
+        wget -O opencv.zip https://github.com/opencv/opencv/archive/4.10.0.zip
+        unzip opencv.zip
+        cd opencv-4.10.0
+        
+        mkdir build
+        cd build
+        
+        # Configure OpenCV for universal build
+        cmake -D CMAKE_BUILD_TYPE=RELEASE \
+              -D CMAKE_INSTALL_PREFIX=$HOME/HanCraft_Pro/python_embed \
+              -D PYTHON3_EXECUTABLE=$HOME/HanCraft_Pro/python_embed/bin/python3.10 \
+              -D PYTHON3_INCLUDE_DIR=$HOME/HanCraft_Pro/python_embed/include/python3.10 \
+              -D PYTHON3_LIBRARY=$HOME/HanCraft_Pro/python_embed/lib/libpython3.10.dylib \
+              -D PYTHON3_PACKAGES_PATH=$HOME/HanCraft_Pro/python_embed/lib/python3.10/site-packages \
+              -D BUILD_opencv_python3=ON \
+              -D CMAKE_OSX_ARCHITECTURES="arm64;x86_64" \
+              -D BUILD_EXAMPLES=OFF \
+              -D BUILD_TESTS=OFF \
+              -D BUILD_PERF_TESTS=OFF \
+              -D BUILD_DOCS=OFF \
+              -D WITH_QT=OFF \
+              -D WITH_GTK=OFF \
+              -D BUILD_opencv_apps=OFF \
+              -D BUILD_SHARED_LIBS=ON \
+              -D ENABLE_NEON=OFF \
+              -D CPU_BASELINE="" \
+              -D CPU_DISPATCH="" \
+              ..
+        
+        # Build and install
+        make -j $(sysctl -n hw.ncpu)
+        make install
+    
+    - name: Verify OpenCV Universal Binary
+      run: |
+        cd ~/HanCraft_Pro/python_embed
+        echo "=== OpenCV Architecture ==="
+        lipo -info lib/python3.10/site-packages/cv2/cv2*.so
+        echo ""
+        echo "=== Test OpenCV Import ==="
+        ./bin/python3.10 -c "import cv2; print('OpenCV version:', cv2.__version__)"
+    
+    - name: Install mediapipe and maya
+      run: |
+        cd ~/HanCraft_Pro/python_embed
+        ./bin/python3.10 -m pip install --upgrade pip
+        ./bin/pip3 install mediapipe maya
+    
+    - name: Run comprehensive tests
+      run: |
+        cd ~/HanCraft_Pro/python_embed
+        
+        echo "=== Test all imports ==="
+        ./bin/python3.10 -c "
+        import sys
+        import ssl
+        import cv2
+        import mediapipe
+        import maya
+        
+        print('✓ Python version:', sys.version)
+        print('✓ SSL:', ssl.OPENSSL_VERSION)
+        print('✓ OpenCV:', cv2.__version__)
+        print('✓ Mediapipe imported successfully')
+        print('✓ Maya imported successfully')
+        print('')
+        print('All modules loaded successfully!')
+        "
+    
+    - name: Create usage documentation
+      run: |
+        cd ~/HanCraft_Pro
+        cat > README.md << 'EOF'
+        # HanCraft Pro - Portable Python 3.10.8 (Universal macOS)
+        
+        ## What's Included
+        - Python 3.10.8 (universal binary: Intel + Apple Silicon)
+        - OpenCV 4.10.0
+        - MediaPipe
+        - Maya
+        
+        ## Usage
+        
+        Simply call the Python binary directly:
+```bash
+        cd HanCraft_Pro/python_embed/bin
+        ./python3.10 your_script.py
+```
+        
+        Or add to PATH:
+```bash
+        export PATH="/path/to/HanCraft_Pro/python_embed/bin:$PATH"
+        python3.10 your_script.py
+```
+        
+        ## Compatibility
+        - ✓ macOS Big Sur 11.0 and newer
+        - ✓ Intel Macs (x86_64)
+        - ✓ Apple Silicon Macs (M1/M2/M3/M4)
+        
+        ## Test Installation
+```bash
+        cd HanCraft_Pro/python_embed/bin
+        ./python3.10 -c "import cv2, mediapipe, maya; print('All modules working!')"
+```
+        EOF
+    
+    - name: Package for download
+      run: |
+        cd ~
+        tar -czf HanCraft_Pro.tar.gz HanCraft_Pro/
+        echo "=== Package Created ==="
+        ls -lh HanCraft_Pro.tar.gz
+    
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: HanCraft_Pro_macOS_Universal
+        path: ~/HanCraft_Pro.tar.gz
+        retention-days: 7
