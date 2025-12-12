@@ -124,7 +124,7 @@ jobs:
         cd ~/HanCraft_Pro/python_embed
         
         echo "=== Test all imports ==="
-        ./bin/python3.10 -c "
+        ./bin/python3.10 << 'PYEOF'
         import sys
         import ssl
         import cv2
@@ -138,7 +138,7 @@ jobs:
         print('✓ Maya imported successfully')
         print('')
         print('All modules loaded successfully!')
-        "
+        PYEOF
     
     - name: Create usage documentation
       run: |
