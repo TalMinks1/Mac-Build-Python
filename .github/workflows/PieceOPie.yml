@@ -143,7 +143,7 @@ jobs:
     - name: Create usage documentation
       run: |
         cd ~/HanCraft_Pro
-        cat > README.md << 'EOF'
+        cat > README.md << 'DOCEOF'
         # HanCraft Pro - Portable Python 3.10.8 (Universal macOS)
         
         ## What's Included
@@ -155,28 +155,25 @@ jobs:
         ## Usage
         
         Simply call the Python binary directly:
-```bash
+        
         cd HanCraft_Pro/python_embed/bin
         ./python3.10 your_script.py
-```
         
         Or add to PATH:
-```bash
+        
         export PATH="/path/to/HanCraft_Pro/python_embed/bin:$PATH"
         python3.10 your_script.py
-```
         
         ## Compatibility
-        - ✓ macOS Big Sur 11.0 and newer
-        - ✓ Intel Macs (x86_64)
-        - ✓ Apple Silicon Macs (M1/M2/M3/M4)
+        - macOS Big Sur 11.0 and newer
+        - Intel Macs (x86_64)
+        - Apple Silicon Macs (M1/M2/M3/M4)
         
         ## Test Installation
-```bash
+        
         cd HanCraft_Pro/python_embed/bin
         ./python3.10 -c "import cv2, mediapipe, maya; print('All modules working!')"
-```
-        EOF
+        DOCEOF
     
     - name: Package for download
       run: |
