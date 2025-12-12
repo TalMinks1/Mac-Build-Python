@@ -34,7 +34,7 @@ jobs:
                     --with-openssl=${OPENSSL_PREFIX} \
                     --enable-optimizations
         
-        # Build and install (Python build is usually safe with more cores)
+        # Build and install Python (standard make is fine here)
         make -j 4
         make install
         
@@ -60,9 +60,6 @@ jobs:
         echo "=== Python Architecture ==="
         lipo -info bin/python3.10
         echo ""
-        echo "=== Python Version ==="
-        ./bin/python3.10 --version
-        echo ""
         echo "=== SSL Support ==="
         ./bin/python3.10 -c "import ssl; print('SSL:', ssl.OPENSSL_VERSION)"
     
@@ -70,7 +67,6 @@ jobs:
       run: |
         cd ~
         
-        # Download OpenCV (basic, not contrib)
         wget -O opencv.zip https://github.com/opencv/opencv/archive/4.10.0.zip
         unzip opencv.zip
         cd opencv-4.10.0
@@ -79,10 +75,10 @@ jobs:
         cd build
         
         # Configure OpenCV for universal build
-        # Key Changes:
-        # 1. WITH_IPP=OFF, WITH_ITT=OFF (Fixes Intel linking issues on Universal)
-        # 2. BUILD_ZLIB/JPEG/PNG=ON (Ensures dependencies are also Universal)
-        # 3. Disabling JAVA/Python2 explicitly to save time
+        # CRITICAL FIXES:
+        # 1. PNG_ARM_NEON=OFF -> Fixes the "unknown directive .endfunc" error
+        # 2. WITH_IPP=OFF / WITH_ITT=OFF -> Fixes Intel linking errors
+        # 3. BUILD_ZLIB/JPEG/PNG=ON -> Ensures dependencies are bundled and universal
         
         cmake -D CMAKE_BUILD_TYPE=RELEASE \
               -D CMAKE_INSTALL_PREFIX=$HOME/HanCraft_Pro/python_embed \
@@ -97,6 +93,7 @@ jobs:
               -D BUILD_ZLIB=ON \
               -D BUILD_JPEG=ON \
               -D BUILD_PNG=ON \
+              -D PNG_ARM_NEON=OFF \
               -D BUILD_EXAMPLES=OFF \
               -D BUILD_TESTS=OFF \
               -D BUILD_PERF_TESTS=OFF \
@@ -113,7 +110,7 @@ jobs:
               ..
         
         # Build and install
-        # CRITICAL FIX: Using -j2 instead of full CPUs to prevent OOM Kill
+        # CRITICAL: Keep -j 2 to prevent RAM exhaustion (OOM)
         make -j 2
         make install
     
@@ -130,53 +127,25 @@ jobs:
       run: |
         cd ~/HanCraft_Pro/python_embed
         ./bin/python3.10 -m pip install --upgrade pip
-        # Note: Mediapipe wheels might not support "universal2" tags perfectly 
-        # on all pip versions, but standard install usually works on macOS 14
         ./bin/pip3 install mediapipe maya
     
     - name: Run comprehensive tests
       run: |
         cd ~/HanCraft_Pro/python_embed
-        
         echo "=== Test all imports ==="
         ./bin/python3.10 << 'PYEOF'
-        import sys
-        import ssl
-        import cv2
-        import mediapipe
-        import maya
-        
-        print('✓ Python version:', sys.version)
+        import sys, ssl, cv2, mediapipe, maya
+        print('✓ Python:', sys.version.split()[0])
         print('✓ SSL:', ssl.OPENSSL_VERSION)
         print('✓ OpenCV:', cv2.__version__)
-        print('✓ Mediapipe imported successfully')
-        print('✓ Maya imported successfully')
-        print('')
-        print('All modules loaded successfully!')
+        print('✓ Mediapipe OK')
+        print('✓ Maya OK')
         PYEOF
-    
-    - name: Create usage documentation
-      run: |
-        cd ~/HanCraft_Pro
-        cat > README.md << 'DOCEOF'
-        # HanCraft Pro - Portable Python 3.10.8 (Universal macOS)
-        
-        ## What's Included
-        - Python 3.10.8 (universal binary: Intel + Apple Silicon)
-        - OpenCV 4.10.0
-        - MediaPipe
-        - Maya
-        
-        ## Usage
-        cd HanCraft_Pro/python_embed/bin
-        ./python3.10 your_script.py
-        DOCEOF
     
     - name: Package for download
       run: |
         cd ~
         tar -czf HanCraft_Pro.tar.gz HanCraft_Pro/
-        echo "=== Package Created ==="
         ls -lh HanCraft_Pro.tar.gz
     
     - name: Upload artifact
