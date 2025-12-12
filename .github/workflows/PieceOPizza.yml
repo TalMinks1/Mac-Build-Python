@@ -93,7 +93,7 @@ jobs:
               -D BUILD_ZLIB=ON \
               -D BUILD_JPEG=ON \
               -D BUILD_PNG=ON \
-              -D PNG_ARM_NEON=OFF \
+              -D PNG_ARM_NEON=off \
               -D BUILD_EXAMPLES=OFF \
               -D BUILD_TESTS=OFF \
               -D BUILD_PERF_TESTS=OFF \
