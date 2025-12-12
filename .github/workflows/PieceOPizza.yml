@@ -5,7 +5,7 @@ on:
 
 jobs:
   build:
-    runs-on: macos-14  # Apple Silicon Mac required for universal builds
+    runs-on: macos-14  # Apple Silicon Mac
     
     steps:
     - name: Install build dependencies
@@ -34,8 +34,8 @@ jobs:
                     --with-openssl=${OPENSSL_PREFIX} \
                     --enable-optimizations
         
-        # Build and install
-        make -j $(sysctl -n hw.ncpu)
+        # Build and install (Python build is usually safe with more cores)
+        make -j 4
         make install
         
         # Bundle OpenSSL libraries for portability
@@ -79,6 +79,11 @@ jobs:
         cd build
         
         # Configure OpenCV for universal build
+        # Key Changes:
+        # 1. WITH_IPP=OFF, WITH_ITT=OFF (Fixes Intel linking issues on Universal)
+        # 2. BUILD_ZLIB/JPEG/PNG=ON (Ensures dependencies are also Universal)
+        # 3. Disabling JAVA/Python2 explicitly to save time
+        
         cmake -D CMAKE_BUILD_TYPE=RELEASE \
               -D CMAKE_INSTALL_PREFIX=$HOME/HanCraft_Pro/python_embed \
               -D PYTHON3_EXECUTABLE=$HOME/HanCraft_Pro/python_embed/bin/python3.10 \
@@ -87,10 +92,17 @@ jobs:
               -D PYTHON3_PACKAGES_PATH=$HOME/HanCraft_Pro/python_embed/lib/python3.10/site-packages \
               -D BUILD_opencv_python3=ON \
               -D CMAKE_OSX_ARCHITECTURES="arm64;x86_64" \
+              -D WITH_IPP=OFF \
+              -D WITH_ITT=OFF \
+              -D BUILD_ZLIB=ON \
+              -D BUILD_JPEG=ON \
+              -D BUILD_PNG=ON \
               -D BUILD_EXAMPLES=OFF \
               -D BUILD_TESTS=OFF \
               -D BUILD_PERF_TESTS=OFF \
               -D BUILD_DOCS=OFF \
+              -D BUILD_JAVA=OFF \
+              -D BUILD_opencv_python2=OFF \
               -D WITH_QT=OFF \
               -D WITH_GTK=OFF \
               -D BUILD_opencv_apps=OFF \
@@ -101,7 +113,8 @@ jobs:
               ..
         
         # Build and install
-        make -j $(sysctl -n hw.ncpu)
+        # CRITICAL FIX: Using -j2 instead of full CPUs to prevent OOM Kill
+        make -j 2
         make install
     
     - name: Verify OpenCV Universal Binary
@@ -117,6 +130,8 @@ jobs:
       run: |
         cd ~/HanCraft_Pro/python_embed
         ./bin/python3.10 -m pip install --upgrade pip
+        # Note: Mediapipe wheels might not support "universal2" tags perfectly 
+        # on all pip versions, but standard install usually works on macOS 14
         ./bin/pip3 install mediapipe maya
     
     - name: Run comprehensive tests
@@ -153,26 +168,8 @@ jobs:
         - Maya
         
         ## Usage
-        
-        Simply call the Python binary directly:
-        
         cd HanCraft_Pro/python_embed/bin
         ./python3.10 your_script.py
-        
-        Or add to PATH:
-        
-        export PATH="/path/to/HanCraft_Pro/python_embed/bin:$PATH"
-        python3.10 your_script.py
-        
-        ## Compatibility
-        - macOS Big Sur 11.0 and newer
-        - Intel Macs (x86_64)
-        - Apple Silicon Macs (M1/M2/M3/M4)
-        
-        ## Test Installation
-        
-        cd HanCraft_Pro/python_embed/bin
-        ./python3.10 -c "import cv2, mediapipe, maya; print('All modules working!')"
         DOCEOF
     
     - name: Package for download
